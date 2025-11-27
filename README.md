@@ -12,11 +12,12 @@ Elephant tracking dashboard for Botswana - monitoring wildlife movement for cons
 ## 📊 Data
 
 The `data/` folder contains:
+- **`awt_tracking_data_averaged.json`** - Privacy-protected elephant location data (7-day averages)
 - GeoJSON files for populated places and roads
 - Ecoexist logo and images
 - Map overlay data
 
-Dashboard loads live data from secure API endpoints.
+Data is automatically updated daily from the backend repository.
 
 ## 🔒 Privacy Protection
 
