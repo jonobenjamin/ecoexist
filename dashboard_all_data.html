@@ -581,23 +581,42 @@
             sessionStorage.removeItem('awt_logged_in');
         }
 
-        function login(username, password) {
-            // Simple authentication - in production, use proper authentication
-            if (username === 'jono' && password === 'password') {
-                // Don't store in sessionStorage - only show content for this session
-                const loginModal = document.getElementById('loginModal');
-                const mainContent = document.querySelector('.main-content');
-                
-                loginModal.style.display = 'none';
-                mainContent.style.display = 'block';
-                
-                // Initialize map and load data after successful login
-                initMap();
-                loadData();
-                
-                return true;
+        async function login(username, password) {
+            // Authenticate via secure API endpoint (no credentials in browser code)
+            try {
+                const response = await fetch('https://ecoexist-api.vercel.app/api/auth-login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Store credentials for API calls (encrypted in session storage)
+                    sessionStorage.setItem('awt_auth', btoa(username + ':' + password));
+                    
+                    // Don't store in sessionStorage - only show content for this session
+                    const loginModal = document.getElementById('loginModal');
+                    const mainContent = document.querySelector('.main-content');
+                    
+                    loginModal.style.display = 'none';
+                    mainContent.style.display = 'block';
+                    
+                    // Initialize map and load data after successful login
+                    initMap();
+                    loadData();
+                    
+                    return true;
+                } else {
+                    return false;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                return false;
             }
-            return false;
         }
 
         function logout() {
@@ -617,19 +636,35 @@
         }
 
         // Login form handler
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             hideLoginError();
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
 
-            if (login(username, password)) {
-                // Clear form
-                document.getElementById('username').value = '';
-                document.getElementById('password').value = '';
-            } else {
-                showLoginError('Invalid username or password');
+            // Show loading state
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Logging in...';
+
+            try {
+                const success = await login(username, password);
+                
+                if (success) {
+                    // Clear form
+                    document.getElementById('username').value = '';
+                    document.getElementById('password').value = '';
+                } else {
+                    showLoginError('Invalid username or password');
+                }
+            } catch (error) {
+                showLoginError('Login failed. Please try again.');
+            } finally {
+                // Restore button
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
             }
         });
 
@@ -962,13 +997,16 @@
                 const apiUrl = 'https://ecoexist-api.vercel.app/api/awt-data';
                 console.log(`📊 Loading live data (last 90 days): ${apiUrl}`);
 
-                // Create Basic Auth header
-                const authHeader = 'Basic ' + btoa('jono:password');
+                // Get auth token from session storage (set during login)
+                const authToken = sessionStorage.getItem('awt_auth');
+                if (!authToken) {
+                    throw new Error('Authentication required. Please log in again.');
+                }
 
                 const response = await fetch(apiUrl, {
                     method: 'GET',
                     headers: {
-                        'Authorization': authHeader
+                        'Authorization': 'Basic ' + authToken
                     }
                 });
 
@@ -1009,7 +1047,7 @@
 
                 // Load historical data in the background (non-blocking)
                 console.log('🔄 Loading historical data in background...');
-                loadHistoricalDataInBackground(authHeader);
+                loadHistoricalDataInBackground(authToken);
 
             } catch (error) {
                 console.error('❌ Error loading data:', error);
@@ -1032,12 +1070,12 @@
 
         // Background loading of historical data
         let historicalDataLoaded = false;
-        async function loadHistoricalDataInBackground(authHeader) {
+        async function loadHistoricalDataInBackground(authToken) {
             try {
                 const historicalResponse = await fetch('https://ecoexist-api.vercel.app/api/historical-data', {
                     method: 'GET',
                     headers: {
-                        'Authorization': authHeader
+                        'Authorization': 'Basic ' + authToken
                     }
                 });
 
